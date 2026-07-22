@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: expense_tracker_db
+    environment:
+      MYSQL_ROOT_PASSWORD: root123
+      MYSQL_DATABASE: expense_tracker
+      MYSQL_USER: expenseuser
+      MYSQL_PASSWORD: expensepass123
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./backend/src/main/resources/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+      - ./backend/src/main/resources/data.sql:/docker-entrypoint-initdb.d/data.sql
+    networks:
+      - expense_network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: expense_tracker_backend
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/expense_tracker
+      SPRING_DATASOURCE_USERNAME: expenseuser
+      SPRING_DATASOURCE_PASSWORD: expensepass123
+      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+      JWT_SECRET: your_jwt_secret_key_change_this_in_production
+      JWT_EXPIRATION: 86400000
+      JWT_REFRESH_EXPIRATION: 604800000
+    ports:
+      - "8080:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - expense_network
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: expense_tracker_frontend
+    environment:
+      VITE_API_BASE_URL: http://backend:8080
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - expense_network
+    restart: unless-stopped
+
+volumes:
+  mysql_data:
+
+networks:
+  expense_network:
+    driver: bridge
